@@ -18,7 +18,32 @@ import { FlashcardRecord } from '../../../../core/models/flashcard.model';
     </div>
   </div>
 
-  @if (!sessionActive()) {
+  @if (creationMode()) {
+    <div class="session-setup card">
+      <h2>Criar Flashcard</h2>
+      <p class="setup-sub">Adicione um novo cartão para suas revisões.</p>
+      
+      <div class="form-group" style="width: 100%; text-align: left; margin-bottom: 16px;">
+        <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px; display: block;">Categoria</label>
+        <input type="text" [(ngModel)]="newCardCategory" placeholder="Ex: Citações" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-card); color: white;" />
+      </div>
+
+      <div class="form-group" style="width: 100%; text-align: left; margin-bottom: 16px;">
+        <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px; display: block;">Pergunta (Frente)</label>
+        <textarea [(ngModel)]="newCardQuestion" placeholder="Qual a sua pergunta?" rows="2" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-card); color: white; resize: vertical;"></textarea>
+      </div>
+
+      <div class="form-group" style="width: 100%; text-align: left; margin-bottom: 24px;">
+        <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px; display: block;">Resposta (Verso)</label>
+        <textarea [(ngModel)]="newCardAnswer" placeholder="Qual a resposta correta?" rows="3" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-card); color: white; resize: vertical;"></textarea>
+      </div>
+
+      <div style="display: flex; gap: 12px; width: 100%;">
+        <button class="qty-btn" style="flex: 1;" (click)="creationMode.set(false)">Cancelar</button>
+        <button class="btn-primary" style="flex: 1;" [disabled]="!newCardQuestion || !newCardAnswer" (click)="saveCustomCard()">Salvar Card</button>
+      </div>
+    </div>
+  } @else if (!sessionActive()) {
     <!-- Tela de configuração: escolhe os assuntos e quantos cards quer revisar -->
     <div class="session-setup card">
       <h2>O que vamos revisar hoje?</h2>
@@ -55,7 +80,10 @@ import { FlashcardRecord } from '../../../../core/models/flashcard.model';
         Nenhum flashcard disponível para os assuntos selecionados.
       </div>
 
-      <button class="btn-primary" [disabled]="availableCardsCount() === 0" (click)="startSession()">Começar revisão →</button>
+      <div style="display: flex; gap: 12px; width: 100%;">
+        <button class="qty-btn" style="flex: 1; text-align: center; justify-content: center; background: rgba(255,255,255,0.02);" (click)="creationMode.set(true)">+ Criar Card</button>
+        <button class="btn-primary" style="flex: 2;" [disabled]="availableCardsCount() === 0" (click)="startSession()">Começar revisão →</button>
+      </div>
     </div>
   } @else if (!finished()) {
     <div class="cards-layout">
@@ -225,8 +253,14 @@ h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em; }
 })
 export class FlashcardsComponent implements OnInit, OnDestroy {
   sessionActive = signal(false);
+  creationMode = signal(false);
   desiredCount = 10;
   selectedCategories = signal<Set<string>>(new Set());
+
+  // Form for custom cards
+  newCardQuestion = '';
+  newCardAnswer = '';
+  newCardCategory = 'Personalizado';
 
   sessionCards = signal<FlashcardRecord[]>([]);
   currentIndex = signal(0);
@@ -310,6 +344,14 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
 
   backToSetup() {
     this.sessionActive.set(false);
+  }
+
+  saveCustomCard() {
+    if (!this.newCardQuestion.trim() || !this.newCardAnswer.trim()) return;
+    this.flashcardsService.addCustomCard(this.newCardQuestion, this.newCardAnswer, this.newCardCategory);
+    this.newCardQuestion = '';
+    this.newCardAnswer = '';
+    this.creationMode.set(false);
   }
 
   revealAnswer() { this.showAnswer.set(true); }

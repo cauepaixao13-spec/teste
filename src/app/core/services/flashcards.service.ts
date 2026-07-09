@@ -79,9 +79,10 @@ export class FlashcardsService {
     }
 
     const predefined = this.getPredefinedCards();
+    const customCards = this.storage.get<FlashcardRecord[]>(`custom-flashcards:${userId}`, []);
     const progressMap = this.storage.get<Record<string, CardProgress>>(this.progressKey(userId), {});
 
-    const mergedCards = predefined.map(c => {
+    const mergedCards = [...predefined, ...customCards].map(c => {
       const savedStats = progressMap[c.id];
       if (savedStats) {
         c.stats = savedStats;
@@ -109,59 +110,100 @@ export class FlashcardsService {
     this.storage.set(this.sessionsKey(userId), this.sessions());
   }
 
+  addCustomCard(question: string, answer: string, category: string = 'Personalizado'): void {
+    const userId = this.auth.currentUser()?.id;
+    if (!userId) return;
+
+    const now = new Date().toISOString();
+    const newCard: FlashcardRecord = {
+      id: `custom_${crypto.randomUUID()}`,
+      question,
+      answer,
+      category,
+      favorite: false,
+      createdAt: now,
+      updatedAt: now,
+      stats: { timesReviewed: 0, timesEasy: 0, timesHard: 0, lastReviewedAt: null }
+    };
+
+    // Obter cards customizados atuais
+    const customKey = `custom-flashcards:${userId}`;
+    const customCards = this.storage.get<FlashcardRecord[]>(customKey, []);
+    customCards.push(newCard);
+    
+    // Salvar e atualizar a base
+    this.storage.set(customKey, customCards);
+    this.baseCards.update(list => [...list, newCard]);
+  }
+
   private getPredefinedCards(): FlashcardRecord[] {
     const now = new Date().toISOString();
     const seeds: [string, string, string, string][] = [
-      ['c_est_01', 'O que é a tese na redação do ENEM?', 'É o posicionamento central do autor sobre o tema, que será defendido ao longo do texto.', 'Estrutura'],
-      ['c_est_02', 'Quantos parágrafos são recomendados para a redação do ENEM?', 'O ideal são 4 parágrafos: 1 de introdução, 2 de desenvolvimento e 1 de conclusão.', 'Estrutura'],
-      ['c_est_03', 'Qual o objetivo da introdução?', 'Apresentar o tema (contextualização) e a tese (ponto de vista a ser defendido).', 'Estrutura'],
-      ['c_est_04', 'O que é o tópico frasal?', 'A frase inicial do parágrafo de desenvolvimento que resume a ideia principal que será discutida nele.', 'Estrutura'],
-      ['c_est_05', 'Como deve ser a conclusão?', 'Deve retomar brevemente a tese e apresentar a proposta de intervenção completa.', 'Estrutura'],
-      ['c_est_06', 'Qual a função do desenvolvimento 1 (D1)?', 'Defender o primeiro argumento apontado na tese, trazendo fundamentação e reflexão.', 'Estrutura'],
-      ['c_est_07', 'Qual a função do desenvolvimento 2 (D2)?', 'Defender o segundo argumento da tese, somando à discussão sem contradizer o D1.', 'Estrutura'],
-      ['c_est_08', 'Pode apresentar argumento novo na conclusão?', 'Não. A conclusão serve para fechar as ideias já apresentadas e propor a intervenção.', 'Estrutura'],
-      ['c_est_09', 'O que é projeto de texto estratégico?', 'É o planejamento prévio que garante que todas as partes do texto estejam conectadas e a tese seja provada.', 'Estrutura'],
-      ['c_est_10', 'Como estruturar um parágrafo de desenvolvimento?', 'Tópico frasal + Repertório/Fundamentação + Análise/Argumentação + Fechamento.', 'Estrutura'],
-      ['c_coe_01', 'O que é coesão textual?', 'É a conexão lógica entre frases e parágrafos usando conectivos, pronomes e sinônimos.', 'Coesão'],
-      ['c_coe_02', 'Cite conectivos para iniciar o D1.', 'Em primeiro lugar, Sob esse viés, Mormente, Primeiramente.', 'Coesão'],
-      ['c_coe_03', 'Cite conectivos para iniciar o D2 (adição/soma).', 'Ademais, Além disso, Outrossim, Somado a isso.', 'Coesão'],
-      ['c_coe_04', 'Cite conectivos para iniciar a conclusão.', 'Portanto, Por conseguinte, Infere-se, portanto, que, Dessa forma.', 'Coesão'],
-      ['c_coe_05', 'Qual a diferença entre "mas" e "mais"?', '"Mas" indica oposição (porém); "mais" indica quantidade/adição.', 'Coesão'],
-      ['c_coe_06', 'O que é coesão referencial?', 'Uso de pronomes ou sinônimos para evitar a repetição da mesma palavra no texto.', 'Coesão'],
-      ['c_coe_07', 'Como evitar a repetição de palavras?', 'Usando sinônimos, hiperônimos, hipônimos ou pronomes relativos.', 'Coesão'],
-      ['c_coe_08', 'O que é coesão sequencial?', 'Uso de conjunções e conectivos para dar progressão às ideias e ligar os parágrafos.', 'Coesão'],
-      ['c_coe_09', 'É obrigatório usar conectivos no início dos parágrafos?', 'Sim, pelo menos dois parágrafos de desenvolvimento e a conclusão devem começar com operadores interparágrafos.', 'Coesão'],
-      ['c_coe_10', 'Qual o perigo do gerúndio excessivo?', 'Pode causar ambiguidade, empobrecer a coesão ou gerar gerundismo. Use com moderação.', 'Coesão'],
-      ['c_pro_01', 'Quais são os 5 elementos obrigatórios da Proposta de Intervenção?', 'Agente, Ação, Modo/Meio, Finalidade e Detalhamento.', 'Proposta de Intervenção'],
-      ['c_pro_02', 'O que é o Agente na proposta de intervenção?', 'Quem vai executar a ação para solucionar ou mitigar o problema (ex: Estado, Escolas, Mídia).', 'Proposta de Intervenção'],
-      ['c_pro_03', 'O que é a Ação na proposta de intervenção?', 'O que deve ser feito de forma prática para resolver o problema.', 'Proposta de Intervenção'],
-      ['c_pro_04', 'O que é o Modo/Meio na proposta de intervenção?', 'Como a ação será realizada, por qual caminho (ex: por meio de verbas governamentais, mediante campanhas).', 'Proposta de Intervenção'],
-      ['c_pro_05', 'O que é a Finalidade na proposta de intervenção?', 'Para que a ação será feita, o objetivo final (ex: a fim de reduzir a desigualdade).', 'Proposta de Intervenção'],
-      ['c_pro_06', 'O que é o Detalhamento na proposta de intervenção?', 'Uma informação extra explicativa sobre o agente, a ação, o meio ou a finalidade.', 'Proposta de Intervenção'],
-      ['c_pro_07', 'O que é "GOMIFES"?', 'Mnemônico para agentes: Governo, ONGs, Mídia, Indústria, Família, Escola, Sociedade.', 'Proposta de Intervenção'],
-      ['c_pro_08', 'Pode ter mais de uma proposta de intervenção?', 'Sim, mas apenas UMA será avaliada em sua completude. Foque em fazer uma 100% completa.', 'Proposta de Intervenção'],
-      ['c_pro_09', 'Por que a proposta não pode ferir os Direitos Humanos?', 'Desrespeitar os Direitos Humanos (ex: apoiar tortura, censura) zera a Competência 5.', 'Proposta de Intervenção'],
-      ['c_pro_10', 'A proposta precisa resolver todo o problema do Brasil?', 'Não, ela precisa apenas ser viável e estar diretamente relacionada aos argumentos apresentados no texto.', 'Proposta de Intervenção'],
-      ['c_rep_01', 'O que é repertório legitimado?', 'Informação respaldada por áreas do conhecimento (ciência, filosofia, história, artes).', 'Repertório'],
-      ['c_rep_02', 'O que é repertório pertinente?', 'Aquele que tem relação direta com pelo menos um dos elementos do tema da redação.', 'Repertório'],
-      ['c_rep_03', 'O que é repertório produtivo?', 'Quando o repertório não é apenas jogado no texto, mas sim relacionado e analisado junto ao argumento.', 'Repertório'],
-      ['c_rep_04', 'Cite um repertório coringa sobre direitos/leis.', 'Constituição Federal de 1988, que garante direitos básicos como saúde, educação e igualdade.', 'Repertório'],
-      ['c_rep_05', 'O que defende a teoria de Zygmunt Bauman (Modernidade Líquida)?', 'As relações e instituições da sociedade contemporânea são fluidas, passageiras e sem solidez.', 'Repertório'],
-      ['c_rep_06', 'Filmes, séries e músicas podem ser usados como repertório?', 'Sim! A cultura pop é uma excelente área do conhecimento, desde que conectada de forma produtiva à argumentação.', 'Repertório'],
-      ['c_rep_07', 'Como usar alusão histórica?', 'Citando um fato ou contexto do passado e comparando (por semelhança ou contraste) com a situação atual do problema.', 'Repertório'],
-      ['c_rep_08', 'Posso inventar um dado estatístico?', 'Nunca. Dados inventados ou sem fonte confiável não são legitimados e prejudicam muito a nota.', 'Repertório'],
-      ['c_rep_09', 'Quem são os contratualistas (como Hobbes e Locke) e o que defendem?', 'Eles defendem que o Estado deve garantir direitos e proteção aos cidadãos em troca da submissão às leis.', 'Repertório'],
-      ['c_rep_10', 'Cite um repertório pertinente sobre invisibilidade social.', '"Cidadão de Papel", do jornalista Gilberto Dimenstein, onde os direitos existem apenas na lei e não na prática.', 'Repertório'],
-      ['c_err_01', 'O que avalia a Competência 1 do ENEM?', 'O domínio da norma-padrão da língua escrita (ortografia, concordância, regência, crase, pontuação).', 'Competências e Erros'],
-      ['c_err_02', 'O que avalia a Competência 2 do ENEM?', 'Compreensão da proposta de redação, estrutura do texto dissertativo-argumentativo e uso de repertório sociocultural.', 'Competências e Erros'],
-      ['c_err_03', 'O que avalia a Competência 3 do ENEM?', 'Seleção, relação, organização e interpretação de fatos e opiniões em defesa de um ponto de vista (projeto de texto).', 'Competências e Erros'],
-      ['c_err_04', 'O que avalia a Competência 4 do ENEM?', 'Demonstração de conhecimento dos mecanismos linguísticos (coesão) necessários para a argumentação.', 'Competências e Erros'],
-      ['c_err_05', 'O que avalia a Competência 5 do ENEM?', 'Elaboração de proposta de intervenção viável para o problema abordado, respeitando os direitos humanos.', 'Competências e Erros'],
-      ['c_err_06', 'O que é tangenciar o tema?', 'Abordar apenas o assunto geral, sem focar na delimitação específica ou no problema central proposto na frase-tema.', 'Competências e Erros'],
-      ['c_err_07', 'O que significa fugir do tema na redação?', 'Escrever sobre um assunto totalmente diferente do exigido pela proposta (acarreta nota zero na redação).', 'Competências e Erros'],
-      ['c_err_08', 'Posso usar a primeira pessoa (eu/nós) na redação?', 'Evite "eu" sempre. "Nós" pode ser tolerado, mas o ideal é manter a impessoalidade (ex: "nota-se", "é preciso").', 'Competências e Erros'],
-      ['c_err_09', 'Posso copiar os textos motivadores na íntegra?', 'Não. Cópias puras são desconsideradas da contagem de linhas e prejudicam severamente a avaliação.', 'Competências e Erros'],
-      ['c_err_10', 'O que são marcas de oralidade?', 'Expressões típicas da fala informal (ex: "pra", "né", "tá", "um monte", gírias), que diminuem a nota na Competência 1.', 'Competências e Erros']
+      // Tópico 1: Estrutura do Texto (Introdução, Desenvolvimento, Conclusão)
+      ['t1_1', 'O que deve conter na Introdução do ENEM?', 'Contextualização (apresentação do tema), ponte para o assunto e a Tese (posicionamento crítico).', '1. Estrutura do Texto'],
+      ['t1_2', 'Qual a função do Tópico Frasal?', 'É a frase inicial do parágrafo de desenvolvimento que declara a ideia central (argumento) que será defendida ali.', '1. Estrutura do Texto'],
+      ['t1_3', 'Como deve ser a estrutura ideal de um Desenvolvimento?', 'Tópico Frasal + Repertório/Fundamentação + Argumentação/Análise crítica + Fechamento do parágrafo.', '1. Estrutura do Texto'],
+      ['t1_4', 'Qual a diferença entre Desenvolvimento 1 e 2?', 'O D1 foca no primeiro argumento (ex: causa) e o D2 no segundo argumento (ex: consequência), de forma complementar.', '1. Estrutura do Texto'],
+      ['t1_5', 'A conclusão pode apresentar um novo argumento?', 'Não. A conclusão tem a função exclusiva de retomar a tese e apresentar a Proposta de Intervenção.', '1. Estrutura do Texto'],
+      ['t1_6', 'Quantas linhas e parágrafos a redação costuma ter?', 'O modelo de excelência possui 4 parágrafos (1 Intro, 2 Desenv, 1 Conclusão) variando entre 6 e 8 linhas cada.', '1. Estrutura do Texto'],
+
+      // Tópico 2: Proposta de Intervenção (Os 5 elementos obrigatórios da C5)
+      ['t2_1', 'O que é o Agente na Proposta de Intervenção?', 'É o órgão, instituição ou indivíduo responsável por executar a ação (Dica: GOMIFES - Governo, ONGs, Mídia...).', '2. Proposta de Intervenção'],
+      ['t2_2', 'O que caracteriza a Ação na Proposta?', 'É o verbo de ação que indica claramente o que será feito para solucionar ou mitigar o problema.', '2. Proposta de Intervenção'],
+      ['t2_3', 'O que significa o Modo/Meio na Proposta?', 'Indica COMO a ação será realizada. Geralmente introduzido por "por meio de", "mediante", "através de".', '2. Proposta de Intervenção'],
+      ['t2_4', 'O que é o Efeito/Finalidade na Proposta?', 'É o resultado esperado da ação. Ex: "a fim de mitigar a desigualdade", "com o intuito de...".', '2. Proposta de Intervenção'],
+      ['t2_5', 'O que é o Detalhamento e onde se aplica?', 'É uma informação extra que especifica e explica melhor um dos 4 elementos (Agente, Ação, Modo ou Efeito).', '2. Proposta de Intervenção'],
+      ['t2_6', 'A proposta pode ferir os Direitos Humanos?', 'Não! Sugerir censura, tortura ou restrição de direitos fundamentais zera a Competência 5.', '2. Proposta de Intervenção'],
+
+      // Tópico 3: As 5 Competências de Avaliação do ENEM
+      ['t3_1', 'O que é avaliado na Competência 1?', 'Domínio da modalidade escrita formal: ausência de erros de gramática, crase, vírgula e ortografia.', '3. As 5 Competências'],
+      ['t3_2', 'O que é avaliado na Competência 2?', 'Compreensão do tema, estrutura dissertativo-argumentativa e uso de repertório sociocultural legitimado.', '3. As 5 Competências'],
+      ['t3_3', 'O que a Competência 3 avalia?', 'Projeto de Texto. A capacidade de selecionar, relacionar e interpretar informações em defesa da tese.', '3. As 5 Competências'],
+      ['t3_4', 'O que significa "Projeto de Texto" na C3?', 'O planejamento prévio: introduzir argumentos na introdução, desenvolvê-los no D1/D2, e resolvê-los na Conclusão.', '3. As 5 Competências'],
+      ['t3_5', 'O que a Competência 4 avalia?', 'Mecanismos de Coesão. O uso correto e diversificado de conectivos inter e intraparágrafos.', '3. As 5 Competências'],
+      ['t3_6', 'O que zera a Competência 5?', 'Ausência de proposta, proposta que não resolve o problema abordado ou que desrespeita os Direitos Humanos.', '3. As 5 Competências'],
+      ['t3_7', 'Quantos pontos vale cada competência?', 'Cada uma vale 200 pontos (avaliadas de 40 em 40), totalizando 1000 pontos na redação.', '3. As 5 Competências'],
+
+      // Tópico 4: Coesão e Coerência (Uso de conectivos e progressão textual)
+      ['t4_1', 'O que é Coesão Interparágrafos?', 'O uso de conectivos no INÍCIO dos parágrafos para ligá-los ao anterior (Ex: "Nesse contexto", "Além disso").', '4. Coesão e Coerência'],
+      ['t4_2', 'Quais são bons conectivos para iniciar o D1?', '"Sob esse viés", "Em primeiro plano", "Primeiramente", "Diante desse cenário".', '4. Coesão e Coerência'],
+      ['t4_3', 'Quais são bons conectivos para iniciar o D2?', '"Ademais", "Outrossim", "Além disso", "Somado a isso".', '4. Coesão e Coerência'],
+      ['t4_4', 'Quais são bons conectivos para a Conclusão?', '"Portanto", "Desse modo", "Evidencia-se, assim, que", "Logo".', '4. Coesão e Coerência'],
+      ['t4_5', 'O que é Coesão Referencial?', 'O uso de pronomes ou sinônimos para evitar a repetição da mesma palavra no texto.', '4. Coesão e Coerência'],
+      ['t4_6', 'Qual a diferença entre Coesão e Coerência?', 'Coesão é a ligação lógica das palavras/frases. Coerência é a lógica de sentido, sem contradições argumentativas.', '4. Coesão e Coerência'],
+
+      // Tópico 5: Repertório Sociocultural Coringa
+      ['t5_1', 'Bauman e a "Modernidade Líquida"', 'Relações, instituições e valores atuais são fluidos e superficiais. (Temas: redes sociais, consumo, relações).', '5. Repertório Sociocultural'],
+      ['t5_2', 'Bourdieu e o "Capital Cultural"', 'Acúmulo de conhecimento transmitido socialmente. A falta dele explica a manutenção da desigualdade intergeracional.', '5. Repertório Sociocultural'],
+      ['t5_3', 'Arendt e a "Banalidade do Mal"', 'Quando atitudes cruéis ou preconceitos se tornam normalizados e rotineiros (as pessoas param de refletir sobre as ações).', '5. Repertório Sociocultural'],
+      ['t5_4', 'Bauman e as "Instituições Zumbis"', 'Instituições (Estado, família) que existem na teoria, mas na prática não cumprem seu papel. (Temas: Omissão estatal).', '5. Repertório Sociocultural'],
+      ['t5_5', 'Dimenstein e o "Cidadão de Papel"', 'Ineficácia das leis no Brasil: direitos constitucionais existem no papel, mas não na realidade de muitos.', '5. Repertório Sociocultural'],
+      ['t5_6', 'Constituição de 1988 como Coringa', 'O Artigo 6º garante direitos (saúde, educação, moradia). Cita-se para contrastar com a falha estatal em garanti-los.', '5. Repertório Sociocultural'],
+      ['t5_7', 'O Contratualismo (Locke, Hobbes)', 'Cidadãos abdicam de liberdades em troca de proteção do Estado. A quebra desse Contrato Social gera os problemas.', '5. Repertório Sociocultural'],
+
+      // Tópico 6: Estratégias Argumentativas
+      ['t6_1', 'O que é argumentação por "Causa e Consequência"?', 'Expor no D1 a causa do problema (ex: omissão) e no D2 a consequência para a sociedade (ex: criminalidade).', '6. Estratégias Argumentativas'],
+      ['t6_2', 'Como usar Dados Estatísticos produtivamente?', 'Nunca cite apenas o dado. Você deve interpretar o que ele significa e como comprova a sua tese.', '6. Estratégias Argumentativas'],
+      ['t6_3', 'O que é Alusão Histórica?', 'Traçar paralelo entre um fato histórico e o presente, mostrando que o problema persiste ou como mudou.', '6. Estratégias Argumentativas'],
+      ['t6_4', 'Argumentação por Exemplificação', 'Usar um caso real e notório (notícia ampla) para materializar que o problema existe na prática.', '6. Estratégias Argumentativas'],
+      ['t6_5', 'Como evitar o argumento baseado em "Senso Comum"?', 'Baseando sua opinião em fatos, ciência ou história. Em vez de xingar o governo, explique COMO e POR QUE é ineficaz.', '6. Estratégias Argumentativas'],
+      ['t6_6', 'Argumento por Autoridade', 'Citar a visão de especialista, pensador ou instituição renomada para respaldar o ponto de vista.', '6. Estratégias Argumentativas'],
+
+      // Tópico 7: Gramática Aplicada à Redação
+      ['t7_1', 'Quando é obrigatório o uso da Crase?', 'Na junção da preposição "a" exigida pelo termo anterior com o artigo feminino "a" do termo seguinte.', '7. Gramática Aplicada'],
+      ['t7_2', 'A crase pode ocorrer antes de verbo?', 'Nunca! Também não ocorre antes de palavras masculinas ou pronome indefinido ("acesso a todos").', '7. Gramática Aplicada'],
+      ['t7_3', 'Regra básica da vírgula entre Sujeito e Verbo', 'Nunca se deve separar o Sujeito do seu Verbo por vírgula, nem o Verbo do seu Complemento direto.', '7. Gramática Aplicada'],
+      ['t7_4', 'Adjunto adverbial deslocado', 'Se for longo e deslocado pro início da frase, a vírgula é obrigatória (Ex: "No Brasil do século XXI, ...").', '7. Gramática Aplicada'],
+      ['t7_5', 'Regência do verbo Assistir', 'No sentido de ver (TV), exige preposição (assistem a séries). Sentido de dar suporte não exige preposição.', '7. Gramática Aplicada'],
+      ['t7_6', 'Concordância do verbo Fazer', 'O verbo "fazer" indicando tempo não vai para o plural. O correto é "Faz dez anos", e nunca "Fazem".', '7. Gramática Aplicada'],
+
+      // Tópico 8: Eixos Temáticos Principais
+      ['t8_1', 'Eixo: Tecnologia e Redes Sociais', 'Foque em impactos comportamentais (ansiedade), bolhas sociais (algoritmos) ou exclusão digital na periferia.', '8. Eixos Temáticos Principais'],
+      ['t8_2', 'Eixo: Meio Ambiente', 'Relacionar com o capitalismo, exploração irracional pelo lucro e a omissão/falta de fiscalização governamental.', '8. Eixos Temáticos Principais'],
+      ['t8_3', 'Eixo: Saúde Pública', 'Aborde a desigualdade de acesso (infraestrutura precária na periferia) ou a estigmatização de doenças mentais.', '8. Eixos Temáticos Principais'],
+      ['t8_4', 'Eixo: Minorias e Grupos Vulneráveis', 'Foque no preconceito histórico enraizado (estrutural) e na falta de empatia e garantias civis da sociedade.', '8. Eixos Temáticos Principais'],
+      ['t8_5', 'Eixo: Educação', 'Destaque a educação pública sucateada, evasão escolar para o subemprego e falta de infraestrutura.', '8. Eixos Temáticos Principais'],
+      ['t8_6', 'Causa transversal (A Omissão Estatal)', 'A negligência do Estado em elaborar ou executar políticas públicas eficazes é a raiz de quase todos os temas.', '8. Eixos Temáticos Principais']
     ];
 
     return seeds.map(([id, question, answer, category]) => ({
